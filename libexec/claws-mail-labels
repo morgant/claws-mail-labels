@@ -25,7 +25,22 @@ _imapcache="${HOME}/.claws-mail/imapcache"
 _labelscache="${HOME}/.claws-mail/labelscache"
 _server="$CM_LABELS_SERVER"
 _mailbox="$CM_LABELS_MAILBOX"
+_message_path="$CM_LABELS_MESSAGE"
 
+# parse server & mailbox from a message file's path
+parse_message_path_mailbox_server() {
+  [ -z "$_message_path" ] && exit 1
+
+  # parse the server from the message file path
+  _server="${_message_path##"$_imapcache"/}"
+  _server="${_server%%/*}"
+
+  # parse the mailbox from the message file path
+  _mailbox="${_message_path##"$_imapcache"/"$_server"/}"
+  _mailbox="${_mailbox%%/*}"
+}
+
+# given a mailbox, find its IMAP server
 find_mailbox_server() {
   [ -z "$_mailbox" ] && exit 1
   # we search imapcache for the server & mailbox because this often happens before mairix configuration
@@ -69,7 +84,7 @@ EOF
 
 # print usage instructions
 usage() {
-  printf "Usage: %s [-h] [-i folder] [-m mailbox] [-l message]\n" "$_tool"
+  printf "Usage: %s [-h] [-m mailbox [-i]] [-f file [-r | -l]]\n" "$_tool"
 }
 
 # full index of a mailbox's MH directory, including purging entries
@@ -86,6 +101,13 @@ reindex_label() {
   nice mairix -v -f "$(mairixrc_path)" -Q -F
 }
 
+reindex_labels_for_message_path() {
+  list_labels_for_message_path | while IFS="" read -r _label ; do
+    [ -z "$_label" ] && continue
+    reindex_label "$_label"
+  done
+}
+
 # print labels/folders which contain the message (by ID)
 list_labels_for_id() {
   _message_id="$1"
@@ -94,24 +116,29 @@ list_labels_for_id() {
 }
 
 # print labels/folders which contain the message
-list_labels_for_file() {
-  _message_path="$1"
-  
-# parse the Message-ID from the email message file on disk
+list_labels_for_message_path() {
+  [ -z "$_message_path" ] && exit 1
+
+  # parse the Message-ID from the email message file on disk
   _message_id_header="$(grep -Ei "^Message-ID:" "$_message_path")"
   _message_id="$(echo "$_message_id_header" | sed -E "s/^Message-ID:[[:space:]]+<?([^>[:space:]]+)>?.*$/\1/")"
   list_labels_for_id "$_message_id"
 }
 
 main() {
-  while getopts hirl:m: _name ; do
+  while getopts f:hirlm: _name ; do
     case $_name in
+      # parse server & mailbox from message path
+      f)
+        _message_path="$OPTARG"
+        parse_message_path_mailbox_server
+        ;;
       # help/usage
       h) usage && exit ;;
       # full index
       i) index_mailbox ;;
       # list labels for an email message file
-      l) list_labels_for_file "$OPTARG" ;;
+      l) list_labels_for_message_path ;;
       # specify mailbox name
       m)
         _mailbox="$OPTARG"
@@ -119,7 +146,7 @@ main() {
         init_mairixrc
         ;;
       # reindex a specific label/folder
-      r) reindex_label "$OPTARG" ;;
+      r) reindex_labels_for_message_path ;;
       ?) usage && exit 2 ;;
     esac
   done
