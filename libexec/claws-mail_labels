@@ -1,0 +1,129 @@
+#!/bin/sh
+
+#
+# claws-mail-labels - Fast-ish Gmail-like labels support for claws-mail
+#
+# Per-account/mailbox mairix(1) indexes:
+#
+# - Automatic mairixrc(5) generation
+# - Perform full account/mailbox indexing
+# - Perform per-label/folder indexing
+# - List labels/folders for any individual message (by 'Message-ID' header)
+#
+# Data directories:
+#
+#   ~/.claws-mail/
+#     labelscache/
+#       <host>/
+#         <mailbox>/
+#           mairixrc
+#           mairixdb
+
+_tool="$(basename "$0")"
+
+_imapcache="${HOME}/.claws-mail/imapcache"
+_labelscache="${HOME}/.claws-mail/labelscache"
+_server="$CM_LABELS_SERVER"
+_mailbox="$CM_LABELS_MAILBOX"
+
+find_mailbox_server() {
+  [ -z "$_mailbox" ] && exit 1
+  # we search imapcache for the server & mailbox because this often happens before mairix configuration
+  _mailbox_path="$(find "$_imapcache" -type d -mindepth 2 -maxdepth 2 -iname "$_mailbox")"
+  _server="$(basename "${_mailbox_path%%"$_mailbox"}")"
+}
+
+mairixrc_path() {
+  [ -z "$_server" ] && exit 1
+  [ -z "$_mailbox" ] && exit 1
+  printf "%s/%s/%s/mairixrc" "$_labelscache" "$_server" "$_mailbox"
+}
+
+mairixdb_path() {
+  [ -z "$_server" ] && exit 1
+  [ -z "$_mailbox" ] && exit 1
+  printf "%s/%s/%s/mairixdb" "$_labelscache" "$_server" "$_mailbox"
+}
+
+has_mairixrc() {
+  [ -d "$(mairixrc_path)" ]
+}
+
+has_mairixdb() {
+  has_mairixrc && [ -d "$(mairixdb_path)" ]
+}
+
+init_mairixrc() {
+  has_mairixdb && return
+  _mairixrc="$(mairixrc_path)"
+  mkdir -p "$(dirname "$_mairixrc")"
+  touch "$_mairixrc"
+  cat >"$_mairixrc" <<EOF
+base=${_imapcache}
+mh=${_server}/${_mailbox}...
+mh=\$CM_LABELS_FOLDER
+database=$(mairixdb_path)
+mformat=raw
+EOF
+}
+
+# print usage instructions
+usage() {
+  printf "Usage: %s [-h] [-i folder] [-m mailbox] [-l message]\n" "$_tool"
+}
+
+# full index of a mailbox's MH directory, including purging entries
+index_mailbox() {
+  printf "_server: '%s'\n_mailbox: '%s'\nmairixrc_path: '%s'\n" "$_server" "$_mailbox" "$(mairixrc_path)"
+  nice mairix -v -f "$(mairixrc_path)" -p
+}
+
+# TODO: fast reindex of just a specific label/folder within an MH directory
+reindex_label() {
+  _mh_dir="$1"
+  _mh_dir="${_mh_dir##*"$_imapcache"}"
+  export CM_LABELS_FOLDER="$_mh_dir"
+  nice mairix -v -f "$(mairixrc_path)" -Q -F
+}
+
+# print labels/folders which contain the message (by ID)
+list_labels_for_id() {
+  _message_id="$1"
+  # print labels/folders which contain the message
+  mairix -f "$(mairixrc_path)" "m:${_message_id}"
+}
+
+# print labels/folders which contain the message
+list_labels_for_file() {
+  _message_path="$1"
+  
+# parse the Message-ID from the email message file on disk
+  _message_id_header="$(grep -Ei "^Message-ID:" "$_message_path")"
+  _message_id="$(echo "$_message_id_header" | sed -E "s/^Message-ID:[[:space:]]+<?([^>[:space:]]+)>?.*$/\1/")"
+  list_labels_for_id "$_message_id"
+}
+
+main() {
+  while getopts hirl:m: _name ; do
+    case $_name in
+      # help/usage
+      h) usage && exit ;;
+      # full index
+      i) index_mailbox ;;
+      # list labels for an email message file
+      l) list_labels_for_file "$OPTARG" ;;
+      # specify mailbox name
+      m)
+        _mailbox="$OPTARG"
+        find_mailbox_server
+        init_mairixrc
+        ;;
+      # reindex a specific label/folder
+      r) reindex_label "$OPTARG" ;;
+      ?) usage && exit 2 ;;
+    esac
+  done
+  shift $(( OPTIND - 1 ))
+}
+
+main "$@"
