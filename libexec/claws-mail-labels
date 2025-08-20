@@ -18,6 +18,14 @@
 #         <mailbox>/
 #           mairixrc
 #           mairixdb
+#
+# TODO:
+#
+# - Update list_labels_for_id() to output mailbox-relative label/folder names
+#   - Update reindex_label() to prepend mailbox path to label name to build MH path for reindexing
+# - Confirm that current reindex_label() implementation doesn't reindex all folders
+#   - Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
+# - Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
 
 _tool="$(basename "$0")"
 
