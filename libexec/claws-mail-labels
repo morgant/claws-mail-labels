@@ -26,6 +26,7 @@
 # - Confirm that current reindex_label() implementation doesn't reindex all folders
 #   - Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
 # - Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
+# - Add a Makefile
 
 _tool="$(basename "$0")"
 
