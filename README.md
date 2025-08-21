@@ -9,6 +9,7 @@ by Morgan Aldridge <morgant@makkintosshu.com>
 
 ### Prerequisites
 
+* perl(1)
 * mairix(1)
 * An IMAP account synchronized for offline use
 * Claws Mail 'Actions' configured to execute `claws-mail-labels`:
@@ -17,6 +18,7 @@ by Morgan Aldridge <morgant@makkintosshu.com>
 
 #### Suggested
 
+* [zenity](https://gitlab.gnome.org/GNOME/zenity)
 * Fast storage device to improve message indexing/re-indexing time
 
 ### Limitations
@@ -59,7 +61,27 @@ Once a mailbox has been initialized, one can perform a full index by executing (
 
 ### Configure Claws Mail Actions
 
-_TBD_
+#### Message Labels/Show
+
+Add a "Shell command" Action:
+
+* **Menu name:** `Message Labels/Show`
+* **Command:** `~/libexec/claws-mail-labels -f %f -l`
+
+##### With Zenity
+
+If you'd like a nicer GUI display, use the following command instead:
+
+```
+~/libexec/claws-mail-labels -f %f -l | zenity --list --title="Labels" --text="%f" --hide-header --column="Label"
+```
+
+#### Message Labels/Re-index
+
+Add a "Shell command" Action:
+
+* **Menu name:** `Message Labels/Re-index`
+* **Command:** `~/libexec/claws-mail-labels -f %f -r`
 
 ## REFERENCE
 
@@ -67,6 +89,7 @@ _TBD_
 * [Claws Mail FAQ: Using Claws Mail with other programs](https://claws-mail.org/faq/index.php/Using_Claws_Mail_with_other_programs)
     * [Claws Mail FAQ: Using Claws Mail with other programs (How can I use Claws Mail with mairix?](https://www.claws-mail.org/faq/index.php/Using_Claws_Mail_with_other_programs#How_can_I_use_Claws_Mail_with_mairix.3F)
 * [Wikipedia: MH Message Handling System](https://en.wikipedia.org/wiki/MH_Message_Handling_System)
+* [Zenity Manual](https://help.gnome.org/users/zenity/stable/index.html.en)
 
 ## LICENSE
 
