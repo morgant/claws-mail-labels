@@ -21,12 +21,12 @@
 #
 # TODO:
 #
-# - Update list_labels_for_id() to output mailbox-relative label/folder names
-#   - Update reindex_label() to prepend mailbox path to label name to build MH path for reindexing
-# - Confirm that current reindex_label() implementation doesn't reindex all folders
-#   - Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
-# - Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
-# - Add a Makefile
+# [X] Update list_labels_for_id() to output mailbox-relative label/folder names
+#   [-] Update reindex_label() to prepend mailbox path to label name to build MH path for reindexing
+# [-] Confirm that current reindex_label() implementation doesn't reindex all folders
+#   [-] Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
+# [-] Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
+# [-] Add a Makefile
 
 _tool="$(basename "$0")"
 
@@ -121,7 +121,12 @@ reindex_labels_for_message_path() {
 list_labels_for_id() {
   _message_id="$1"
   # print labels/folders which contain the message
-  mairix -f "$(mairixrc_path)" "m:${_message_id}"
+  mairix -f "$(mairixrc_path)" "m:${_message_id}" | while IFS="" read -r _label ; do
+    _message_filename="$(basename "$_label")"
+    _label_name="${_label##"$_imapcache"/"$_server"/"$_mailbox"/}"
+    _label_name="${_label_name%%/"$_message_filename"}"
+    printf "%s\n" "$_label_name"
+  done
 }
 
 # print labels/folders which contain the message
@@ -130,7 +135,8 @@ list_labels_for_message_path() {
 
   # parse the Message-ID from the email message file on disk
   _message_id_header="$(grep -Ei "^Message-ID:" "$_message_path")"
-  _message_id="$(echo "$_message_id_header" | sed -E "s/^Message-ID:[[:space:]]+<?([^>[:space:]]+)>?.*$/\1/")"
+  # _message_id="$(echo "$_message_id_header" | sed -E "s/^Message-ID:[[:space:]]+<?([^>[:space:]]+)>?.*$/\1/i")"
+  _message_id="$(echo "$_message_id_header" | perl -p -e "s/^Message-ID:\s+<?([^>\s]+)>?.*$/\$1/i")"
   list_labels_for_id "$_message_id"
 }
 
