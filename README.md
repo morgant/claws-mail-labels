@@ -36,6 +36,7 @@ by Morgan Aldridge <morgant@makkintosshu.com>
     <server>/
       <mailbox>/
         mairixrc
+        mairixrc-reindex
         mairixdb
       .../
     ../

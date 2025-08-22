@@ -17,14 +17,15 @@
 #       <host>/
 #         <mailbox>/
 #           mairixrc
+#           mairixrc-reindex
 #           mairixdb
 #
 # TODO:
 #
 # [X] Update list_labels_for_id() to output mailbox-relative label/folder names
-#   [-] Update reindex_label() to prepend mailbox path to label name to build MH path for reindexing
-# [-] Confirm that current reindex_label() implementation doesn't reindex all folders
-#   [-] Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
+#   [X] Update reindex_label() to prepend mailbox path to label name to build MH path for reindexing
+# [X] Confirm that current reindex_label() implementation does or doesn't reindex all folders
+#   [X] Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
 # [-] Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
 # [-] Add a Makefile
 
@@ -52,25 +53,30 @@ parse_message_path_mailbox_server() {
 # given a mailbox, find its IMAP server
 find_mailbox_server() {
   [ -z "$_mailbox" ] && exit 1
+
   # we search imapcache for the server & mailbox because this often happens before mairix configuration
   _mailbox_path="$(find "$_imapcache" -type d -mindepth 2 -maxdepth 2 -iname "$_mailbox")"
   _server="$(basename "${_mailbox_path%%"$_mailbox"}")"
 }
 
 mairixrc_path() {
+  _variant="$1"
   [ -z "$_server" ] && exit 1
   [ -z "$_mailbox" ] && exit 1
+
   printf "%s/%s/%s/mairixrc" "$_labelscache" "$_server" "$_mailbox"
+  [ -n "$_variant" ] && printf "-%s" "$_variant"
 }
 
 mairixdb_path() {
   [ -z "$_server" ] && exit 1
   [ -z "$_mailbox" ] && exit 1
+
   printf "%s/%s/%s/mairixdb" "$_labelscache" "$_server" "$_mailbox"
 }
 
 has_mairixrc() {
-  [ -d "$(mairixrc_path)" ]
+  [ -d "$(mairixrc_path)" ] && [ -d "$(mairixrc_path reindex)" ]
 }
 
 has_mairixdb() {
@@ -79,12 +85,24 @@ has_mairixdb() {
 
 init_mairixrc() {
   has_mairixdb && return
+
+  # create the mailbox's labelcache directory structure, if needed
   _mairixrc="$(mairixrc_path)"
-  mkdir -p "$(dirname "$_mairixrc")"
-  touch "$_mairixrc"
-  cat >"$_mairixrc" <<EOF
+  _mairixrc_dir="$(dirname "$_mairixrc")"
+  [ ! -d "$_mairixrc_dir" ] && mkdir -p "$_mairixrc_dir"
+
+  # generate the mailbox's main mairixrc for full indexing of all messages in all folders
+  [ ! -f "$_mairixrc" ] && touch "$_mairixrc" && cat >"$_mairixrc" <<EOF
 base=${_imapcache}
 mh=${_server}/${_mailbox}...
+database=$(mairixdb_path)
+mformat=raw
+EOF
+
+  # generate the mailbox's mairixrc variant for only indexing messages in a specified folder
+  _mairixrc="$(mairixrc_path reindex)"
+  [ ! -f "$_mairixrc" ] && touch "$_mairixrc" && cat >"$_mairixrc" <<EOF
+base=${_imapcache}
 mh=\$CM_LABELS_FOLDER
 database=$(mairixdb_path)
 mformat=raw
@@ -99,21 +117,32 @@ usage() {
 # full index of a mailbox's MH directory, including purging entries
 index_mailbox() {
   printf "_server: '%s'\n_mailbox: '%s'\nmairixrc_path: '%s'\n" "$_server" "$_mailbox" "$(mairixrc_path)"
-  nice mairix -v -f "$(mairixrc_path)" -p
+  nice mairix -v -f "$(mairixrc_path)" -F -p
 }
 
 # TODO: fast reindex of just a specific label/folder within an MH directory
 reindex_label() {
   _mh_dir="$1"
-  _mh_dir="${_mh_dir##*"$_imapcache"}"
-  export CM_LABELS_FOLDER="$_mh_dir"
-  nice mairix -v -f "$(mairixrc_path)" -Q -F
+
+  # NOTE: This hack seems to cause mairix to consider indexed messages outside of
+  # the reindexed folder as "stale"/"dead" in the mairix db, which causes
+  # additional indexing overhead for full indexing and/or reindexing other
+  # folders because it then reindexes them. In the case of a full index (like
+  # one would want to perform after fetching/syncing mail), that means _all_
+  # messages except those in the single (non-recursive) folder that was
+  # last reindexed will be indexed anew, which is almost as poor performance
+  # as just deleting the mairix db... or not indexing at all! :'(
+  #
+  # I'm committing this as I'm still going to investigate further on the mairix
+  # side of things, but this'll probably just get reverted
+  export CM_LABELS_FOLDER="$_base_relative_dir"
+  nice mairix -v -f "$(mairixrc_path reindex)" -Q -F
 }
 
 reindex_labels_for_message_path() {
   list_labels_for_message_path | while IFS="" read -r _label ; do
     [ -z "$_label" ] && continue
-    reindex_label "$_label"
+    reindex_label "${_server}/${_mailbox}/${_label}"
   done
 }
 
