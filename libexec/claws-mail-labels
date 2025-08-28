@@ -116,8 +116,10 @@ usage() {
 
 # full index of a mailbox's MH directory, including purging entries
 index_mailbox() {
-  printf "_server: '%s'\n_mailbox: '%s'\nmairixrc_path: '%s'\n" "$_server" "$_mailbox" "$(mairixrc_path)"
-  nice mairix -v -f "$(mairixrc_path)" -F -p
+  _fast="${1:-false}"
+  _purge="${2:-false}"
+
+  nice mairix -v -f "$(mairixrc_path)" $($_fast && echo '-F') $($_purge && echo '-p')
 }
 
 # TODO: fast reindex of just a specific label/folder within an MH directory
@@ -135,7 +137,7 @@ reindex_label() {
   #
   # I'm committing this as I'm still going to investigate further on the mairix
   # side of things, but this'll probably just get reverted
-  export CM_LABELS_FOLDER="$_base_relative_dir"
+  export CM_LABELS_FOLDER="$_mh_dir"
   nice mairix -v -f "$(mairixrc_path reindex)" -Q -F
 }
 
@@ -180,7 +182,7 @@ main() {
       # help/usage
       h) usage && exit ;;
       # full index
-      i) index_mailbox ;;
+      i) index_mailbox false true ;;
       # list labels for an email message file
       l) list_labels_for_message_path ;;
       # specify mailbox name
@@ -190,7 +192,13 @@ main() {
         init_mairixrc
         ;;
       # reindex a specific label/folder
-      r) reindex_labels_for_message_path ;;
+      r)
+        # TODO: override reindexing of individual folders with a non-purge, fast, full index of the mailbox
+        # until I update mairix to not flag messages in other folders as stale/dead. See:
+        # <https://github.com/vandry/mairix/issues/40>
+        index_mailbox true
+        # reindex_labels_for_message_path
+        ;;
       ?) usage && exit 2 ;;
     esac
   done
