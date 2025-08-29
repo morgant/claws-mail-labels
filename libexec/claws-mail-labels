@@ -6,7 +6,7 @@
 # Per-account/mailbox mairix(1) indexes:
 #
 # - Automatic mairixrc(5) generation
-# - Perform full account/mailbox indexing
+# - Perform full account/mailbox indexing, individually or all
 # - Perform per-label/folder indexing
 # - List labels/folders for any individual message (by 'Message-ID' header)
 #
@@ -26,7 +26,7 @@
 #   [X] Update reindex_label() to prepend mailbox path to label name to build MH path for reindexing
 # [X] Confirm that current reindex_label() implementation does or doesn't reindex all folders
 #   [X] Do we need a separate mairixrc file which has only "mh=$CM_LABELS_FOLDER"?
-# [-] Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
+# [X] Add an '-a' (all) option to use with '-i' (full index) option instead of with '-m' (though support both)
 # [-] Add a Makefile
 
 _tool="$(basename "$0")"

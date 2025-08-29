@@ -60,6 +60,14 @@ Once a mailbox has been initialized, one can perform a full index by executing (
 ~/libexec/claws-mail-labels -m <mailbox> -i
 ```
 
+#### Full Index of All Mailboxes
+
+Once one or more mailboxes have been initialized, one can perform a full index of all mailboxes as follows:
+
+```
+~/libexec/claws-mail-labels -a -i
+```
+
 ### Configure Claws Mail Actions
 
 #### Message Labels/Show
@@ -77,7 +85,7 @@ If you'd like a nicer GUI display, use the following command instead:
 ~/libexec/claws-mail-labels -f %f -l | zenity --list --title="Labels" --text="%f" --hide-header --column="Label"
 ```
 
-#### Message Labels/Re-index
+#### Message Labels/Reindexing
 
 Add a "Shell command" Action:
 
