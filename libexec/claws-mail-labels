@@ -31,12 +31,31 @@
 
 _tool="$(basename "$0")"
 
-_all_mailboxes="false"
+_verbose=false
+_all_mailboxes=false
 _imapcache="${HOME}/.claws-mail/imapcache"
 _labelscache="${HOME}/.claws-mail/labelscache"
+_log_path="${HOME}/.claws-mail/labelscache.log"
 _server="$CM_LABELS_SERVER"
 _mailbox="$CM_LABELS_MAILBOX"
 _message_path="$CM_LABELS_MESSAGE"
+
+log() {
+  _message="$1"
+
+  $_verbose && printf "%s\n" "$_message"
+
+  printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$_message" >>"$_log_path"
+}
+
+error() {
+  _message="$1"
+  _fatal=false
+
+  printf "%s: ERROR! %s\n" "$_tool" "$_message" 1>&2
+  printf "[%s] ERROR! %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$_message" >>"$_log_path"
+  $_fatal && printf "%s: Exiting.\n" "$_tool" && exit 1
+}
 
 # parse server & mailbox from a message file's path
 parse_message_path_mailbox_server() {
@@ -107,29 +126,54 @@ init_mairixrc() {
   # create the mailbox's labelcache directory structure, if needed
   _mairixrc="$(mairixrc_path)"
   _mairixrc_dir="$(dirname "$_mairixrc")"
-  [ ! -d "$_mairixrc_dir" ] && mkdir -p "$_mairixrc_dir"
+  if [ ! -d "$_mairixrc_dir" ] ; then
+    log "Creating labelscache directory '$_mairixrc_dir'..."
+    if mkdir -p "$_mairixrc_dir" ; then
+      log "Successfully created labelscache directory '$_mairixrc_dir'."
+    else
+      error "Failed to create labelscache directoey '$_mairixrc_dir'!" true
+    fi
+  fi
 
   # generate the mailbox's main mairixrc for full indexing of all messages in all folders
-  [ ! -f "$_mairixrc" ] && touch "$_mairixrc" && cat >"$_mairixrc" <<EOF
+  if [ ! -f "$_mairixrc" ] ; then
+    log "Generating labelscache mairixrc configuration '$_mairixrc' for indexing..."
+    touch "$_mairixrc"
+    cat >"$_mairixrc" <<EOF
 base=${_imapcache}
 mh=${_server}/${_mailbox}...
 database=$(mairixdb_path)
 mformat=raw
 EOF
+    if [ $? -lt 1 ] ;then
+      log "Successfully generated labelscache mairixrc configuration '$_mairixrc' for indexing."
+    else
+      error "Failed to generate labelscache mairixrc configuration '$_mairixrc' for indexing!"
+    fi
+  fi
 
   # generate the mailbox's mairixrc variant for only indexing messages in a specified folder
   _mairixrc="$(mairixrc_path reindex)"
-  [ ! -f "$_mairixrc" ] && touch "$_mairixrc" && cat >"$_mairixrc" <<EOF
+  if [ ! -f "$_mairixrc" ] ; then
+    log "Generating labelscache mairixrc configuration '$_mairixrc' for reindexing..."
+    touch "$_mairixrc"
+    cat >"$_mairixrc" <<EOF
 base=${_imapcache}
 mh=\$CM_LABELS_FOLDER
 database=$(mairixdb_path)
 mformat=raw
 EOF
+    if [ $? -lt 1 ] ; then
+      log "Successfully generated labelscache mairixrc configuration '$_mairixrc' for reindexing."
+    else
+      error "Failed to generate labelscaceh mairixrc configuration '$_mairixrc' for reindexing!"
+    fi
+  fi
 }
 
 # print usage instructions
 usage() {
-  printf "Usage: %s [-h] [[-a | -m mailbox] [-i]] [-f file [-r | -l]]\n" "$_tool"
+  printf "Usage: %s [-h] [-v] [[-a | -m mailbox] [-i]] [-f file [-r | -l]]\n" "$_tool"
 }
 
 check_usage_conflict_all_mailboxes() {
@@ -145,12 +189,22 @@ index_mailbox() {
   _fast="${1:-false}"
   _purge="${2:-false}"
 
+  log "Updating labelscache mairix index (full; fast: ${_fast}; purge: ${_purge}) for '${_mailbox}' on '${_server}' (IMAP)..."
+  _index_start_time="$(date +%s)"
   # shellcheck disable=SC2046
-  nice mairix -v -f "$(mairixrc_path)" $($_fast && echo '-F') $($_purge && echo '-p')
+  if nice mairix -v -f "$(mairixrc_path)" $($_fast && echo '-F') $($_purge && echo '-p') ; then
+    _index_elapsed_time="$(( $(date +%s) - _index_start_time ))"
+    log "Completed labelscache mairix index (full; fast: ${_fast}; purge: ${_purge}) for '${_mailbox}' on '${_server}' (IMAP) in ${_index_elapsed_time}s."
+  else
+    _index_elapsed_time="$(( $(date +%s) - _index_start_time ))"
+    error "Failed to update labelscache mairix index (full; fast: ${_fast}; purge: ${_purge}) for '${_mailbox}' on '${_server}' (IMAP) after ${_index_elapsed_time}s!"
+  fi
 }
 
 # full index of _all_ mailboxes for _all_ servers, including purging entries
 index_all_mailboxes() {
+  log "Indexing to labelscache for all mailboxes..."
+  _all_index_start_time="$(date +%s)"
   # shellcheck disable=SC2030
   list_servers | while IFS= read -r _server ; do
     # shellcheck disable=SC2030
@@ -158,6 +212,8 @@ index_all_mailboxes() {
       index_mailbox false true
     done
   done
+  _all_index_elapsed_time="$(( $(date +%s) - _all_index_start_time ))"
+  log "Completed indexing to labelscache for all mailboxes in ${_all_index_elapsed_time}s."
 }
 
 # TODO: fast reindex of just a specific label/folder within an MH directory
@@ -213,12 +269,14 @@ list_labels_for_message_path() {
 }
 
 main() {
-  while getopts af:hirlm: _name ; do
+  while getopts af:hirlm:v _name ; do
     case $_name in
       # help/usage
       h) usage && exit ;;
+      # verbose output
+      v) _verbose=true ;;
       # process all mailboxes across all servers
-      a) _all_mailboxes="true" ;;
+      a) _all_mailboxes=true ;;
       # specify mailbox name
       m)
         check_usage_conflict_all_mailboxes "$_name"
